@@ -684,7 +684,34 @@
 
         // Scanner state
         let scannerActive = false;
-        let stream = null;
+        let quaggaInitialized = false;
+        let lockedBarcode = null;
+
+        const handleBarcodeDetected = data => {
+            if (!data || !data.codeResult || !data.codeResult.code) {
+                return;
+            }
+
+            const code = data.codeResult.code.trim();
+
+            if (!code || code === lockedBarcode) {
+                return;
+            }
+
+            lockedBarcode = code;
+            processBarcode(code);
+        };
+
+        function teardownQuagga() {
+            if (!quaggaInitialized) {
+                return;
+            }
+
+            Quagga.offDetected(handleBarcodeDetected);
+            Quagga.stop();
+            Quagga.CameraAccess.release();
+            quaggaInitialized = false;
+        }
 
         // Initialize the inventory table
         function initializeInventoryTable() {
@@ -725,68 +752,81 @@
 
         // Start the barcode scanner
         async function startScanner() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                
-                cameraFeed.srcObject = stream;
+            if (scannerActive) {
+                return;
+            }
 
-                try {
-                    await cameraFeed.play();
-                } catch (playError) {
-                    console.warn('Autoplay prevented, attempting manual play prompt.', playError);
-                }
+            try {
+                await new Promise((resolve, reject) => {
+                    const config = {
+                        inputStream: {
+                            type: 'LiveStream',
+                            target: cameraFeed,
+                            constraints: {
+                                facingMode: 'environment',
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 }
+                            }
+                        },
+                        decoder: {
+                            readers: [
+                                'code_128_reader',
+                                'ean_reader',
+                                'ean_8_reader',
+                                'upc_reader',
+                                'upc_e_reader',
+                                'code_39_reader',
+                                'code_39_vin_reader',
+                                'codabar_reader',
+                                'i2of5_reader',
+                                '2of5_reader'
+                            ]
+                        },
+                        locate: true
+                    };
+
+                    Quagga.init(config, err => {
+                        if (err) {
+                            reject(err);
+                            return;
+                        }
+
+                        Quagga.onDetected(handleBarcodeDetected);
+                        Quagga.start();
+                        quaggaInitialized = true;
+                        resolve();
+                    });
+                });
+
                 scannerActive = true;
-                
+                lockedBarcode = null;
+
                 startScannerBtn.disabled = true;
                 stopScannerBtn.disabled = false;
-                
-                // Simulate barcode detection for demo purposes
-                // In a real application, you would use a library like Quagga.js
-                simulateBarcodeDetection();
-                
             } catch (error) {
-                console.error('Error accessing camera:', error);
+                console.error('Error starting scanner:', error);
                 alert('Unable to access camera. Please check permissions and try again.');
+                teardownQuagga();
+                scannerActive = false;
+                startScannerBtn.disabled = false;
+                stopScannerBtn.disabled = true;
             }
         }
 
         // Stop the barcode scanner
         function stopScanner() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
+            teardownQuagga();
+
+            if (cameraFeed && cameraFeed.srcObject) {
+                cameraFeed.srcObject.getTracks().forEach(track => track.stop());
+                cameraFeed.srcObject = null;
             }
-            
-            cameraFeed.srcObject = null;
+
+            lockedBarcode = null;
             scannerActive = false;
-            
+
             startScannerBtn.disabled = false;
             stopScannerBtn.disabled = true;
-        }
-
-        // Simulate barcode detection for demo
-        function simulateBarcodeDetection() {
-            if (!scannerActive) return;
-            
-            // Randomly select a barcode from our products
-            const barcodes = Object.keys(products);
-            const randomBarcode = barcodes[Math.floor(Math.random() * barcodes.length)];
-            
-            // Simulate scanning after a random delay (1-3 seconds)
-            setTimeout(() => {
-                if (scannerActive) {
-                    processBarcode(randomBarcode);
-                    
-                    // Continue scanning
-                    simulateBarcodeDetection();
-                }
-            }, 1000 + Math.random() * 2000);
         }
 
         // Process the scanned barcode
