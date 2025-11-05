@@ -475,7 +475,7 @@
                     Barcode Scanner
                 </h2>
                 <div class="camera-container">
-                    <video id="camera-feed"></video>
+                    <video id="camera-feed" playsinline autoplay muted></video>
                     <div class="scanner-overlay">
                         <div class="scanner-line"></div>
                     </div>
@@ -661,6 +661,10 @@
 
         // DOM Elements
         const cameraFeed = document.getElementById('camera-feed');
+        cameraFeed.setAttribute('playsinline', '');
+        cameraFeed.setAttribute('autoplay', '');
+        cameraFeed.setAttribute('muted', '');
+        cameraFeed.muted = true;
         const startScannerBtn = document.getElementById('start-scanner');
         const stopScannerBtn = document.getElementById('stop-scanner');
         const manualEntryBtn = document.getElementById('manual-entry');
@@ -731,6 +735,12 @@
                 });
                 
                 cameraFeed.srcObject = stream;
+
+                try {
+                    await cameraFeed.play();
+                } catch (playError) {
+                    console.warn('Autoplay prevented, attempting manual play prompt.', playError);
+                }
                 scannerActive = true;
                 
                 startScannerBtn.disabled = true;
