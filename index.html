@@ -174,6 +174,26 @@
             object-fit: cover;
         }
 
+        .camera-container video,
+        .camera-container canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .camera-container video {
+            z-index: 1;
+        }
+
+        .camera-container canvas {
+            z-index: 2;
+            opacity: 0.25;
+            pointer-events: none;
+        }
+
         .scanner-overlay {
             position: absolute;
             top: 0;
@@ -183,6 +203,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            z-index: 3;
+            pointer-events: none;
         }
 
         .scanner-line {
@@ -445,8 +467,8 @@
                     <span>StyleHub</span>
                 </div>
                 <div class="nav-links">
-                    <a href="#" class="active"><i class="fas fa-home"></i> Dashboard</a>
-                    <a href="#"><i class="fas fa-boxes"></i> Inventory</a>
+                    <a href="index.html" class="active"><i class="fas fa-home"></i> Dashboard</a>
+                    <a href="inventory.html"><i class="fas fa-boxes"></i> Inventory</a>
                     <a href="#"><i class="fas fa-shopping-cart"></i> Sales</a>
                     <a href="#"><i class="fas fa-chart-bar"></i> Reports</a>
                     <a href="#"><i class="fas fa-cog"></i> Settings</a>
