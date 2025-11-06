@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="scripts/navigation.js" defer></script>
     <script src="scripts/index.js" defer></script>
 </head>
 <body>
@@ -18,16 +19,16 @@
                     <i class="fas fa-tshirt"></i>
                     <span>StyleHub</span>
                 </div>
-                <div class="nav-links">
+                <div class="nav-links" id="primary-navigation">
                     <a href="index.html" class="active"><i class="fas fa-home"></i> Dashboard</a>
                     <a href="inventory.html"><i class="fas fa-boxes"></i> Inventory</a>
                     <a href="sales.html"><i class="fas fa-shopping-cart"></i> Sales</a>
                     <a href="reports.html"><i class="fas fa-chart-bar"></i> Reports</a>
                     <a href="#"><i class="fas fa-cog"></i> Settings</a>
                 </div>
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-controls="primary-navigation" aria-expanded="false" aria-label="Toggle navigation">
                     <i class="fas fa-bars"></i>
-                </div>
+                </button>
             </nav>
         </div>
     </header>

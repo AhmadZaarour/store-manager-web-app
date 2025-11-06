@@ -85,6 +85,17 @@ header {
     display: none;
     font-size: 1.5rem;
     cursor: pointer;
+    background: none;
+    border: none;
+    color: var(--text);
+    padding: 8px;
+    border-radius: var(--border-radius);
+    line-height: 0;
+}
+
+.hamburger:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 /* Search Bar */
@@ -1144,12 +1155,46 @@ footer {
 
 /* Responsive Design */
 @media (max-width: 992px) {
+    .navbar {
+        position: relative;
+        align-items: center;
+    }
+
     .nav-links {
         display: none;
+        position: absolute;
+        top: calc(100% + 10px);
+        right: 0;
+        background-color: var(--dark-light);
+        flex-direction: column;
+        gap: 0;
+        width: min(260px, 90vw);
+        padding: 12px 0;
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow);
+        z-index: 1000;
+    }
+
+    .nav-links.is-open {
+        display: flex;
+    }
+
+    .nav-links a {
+        padding: 12px 20px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .nav-links a + a {
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .hamburger {
-        display: block;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .footer-content {
