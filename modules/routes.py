@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from flask import Blueprint, request, jsonify, send_from_directory
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from .tables import db, Product, Sale
@@ -106,6 +107,138 @@ def get_product_by_barcode(barcode):
         return jsonify({"error": "Product not found"}), 404
 
     return jsonify(product_to_dict(product))
+
+
+@main.route('/products/<string:barcode>', methods=['PUT', 'PATCH'])
+def update_product(barcode):
+    product = Product.query.filter_by(barcode=barcode).first()
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+
+    data = request.get_json() or {}
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    updatable_fields = {
+        "name",
+        "barcode",
+        "sku",
+        "brand",
+        "category",
+        "size",
+        "color",
+        "stock",
+        "price",
+        "image_url",
+    }
+
+    updates = {key: value for key, value in data.items() if key in updatable_fields}
+
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+
+    if "barcode" in updates and updates["barcode"] != product.barcode:
+        existing = Product.query.filter_by(barcode=updates["barcode"]).first()
+        if existing:
+            return jsonify({"error": "Barcode already in use"}), 400
+
+    if "sku" in updates and updates["sku"] != product.sku:
+        existing = Product.query.filter_by(sku=updates["sku"]).first()
+        if existing:
+            return jsonify({"error": "SKU already in use"}), 400
+
+    if "stock" in updates:
+        try:
+            updates["stock"] = int(updates["stock"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Stock must be an integer"}), 400
+        if updates["stock"] < 0:
+            return jsonify({"error": "Stock cannot be negative"}), 400
+
+    if "price" in updates:
+        try:
+            updates["price"] = float(updates["price"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Price must be a number"}), 400
+
+    for key, value in updates.items():
+        setattr(product, key, value)
+
+    try:
+        db.session.commit()
+    except IntegrityError as exc:
+        db.session.rollback()
+        return jsonify({
+            "error": "Product could not be updated",
+            "details": str(exc.orig),
+        }), 400
+
+    return jsonify(product_to_dict(product))
+
+
+@main.route('/products/<string:barcode>', methods=['DELETE'])
+def delete_product(barcode):
+    product = Product.query.filter_by(barcode=barcode).first()
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+
+    db.session.delete(product)
+    db.session.commit()
+
+    return jsonify({"status": "deleted", "barcode": barcode})
+
+
+@main.route('/products/<string:barcode>/stock', methods=['POST'])
+def adjust_stock(barcode):
+    product = Product.query.filter_by(barcode=barcode).first()
+    if not product:
+        return jsonify({"error": "Product not found"}), 404
+
+    data = request.get_json() or {}
+
+    if "adjustment" in data:
+        try:
+            adjustment = int(data["adjustment"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Adjustment must be an integer"}), 400
+        new_stock = product.stock + adjustment
+    elif "stock" in data:
+        try:
+            new_stock = int(data["stock"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Stock must be an integer"}), 400
+    else:
+        return jsonify({"error": "Provide an adjustment or stock value"}), 400
+
+    if new_stock < 0:
+        return jsonify({"error": "Stock cannot be negative"}), 400
+
+    product.stock = new_stock
+    db.session.commit()
+
+    return jsonify({
+        "product": product_to_dict(product),
+        "stock": product.stock,
+    })
+
+
+@main.route('/inventory/summary', methods=['GET'])
+def inventory_summary():
+    total_products = Product.query.count()
+    in_stock = Product.query.filter(Product.stock > 10).count()
+    low_stock = Product.query.filter(Product.stock > 0, Product.stock <= 10).count()
+    out_of_stock = Product.query.filter(Product.stock <= 0).count()
+    total_value = (
+        db.session.query(func.coalesce(func.sum(Product.stock * Product.price), 0.0)).scalar()
+    )
+
+    return jsonify({
+        "total_products": total_products,
+        "in_stock": in_stock,
+        "low_stock": low_stock,
+        "out_of_stock": out_of_stock,
+        "inventory_value": round(float(total_value or 0.0), 2),
+    })
 
 
 # ---------- Sales ----------
