@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="styles.css">
     <script src="scripts/navigation.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
     <script src="scripts/sales.js" defer></script>
 </head>
 <body>
@@ -46,7 +47,7 @@
                     <i class="fas fa-file-export"></i>
                     Export
                 </button>
-                <button class="btn btn-secondary">
+                <button class="btn btn-secondary" id="refresh-sales">
                     <i class="fas fa-sync"></i>
                     Refresh
                 </button>
@@ -60,35 +61,35 @@
                     <i class="fas fa-shopping-cart"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>$12,847</h3>
-                    <p>Today's Sales</p>
+                    <h3 id="sales-total-revenue">$0.00</h3>
+                    <p>Total Revenue</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon success">
-                    <i class="fas fa-chart-line"></i>
+                    <i class="fas fa-receipt"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>84</h3>
-                    <p>Transactions Today</p>
+                    <h3 id="sales-transaction-count">0</h3>
+                    <p>Transactions Recorded</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon warning">
-                    <i class="fas fa-users"></i>
+                    <i class="fas fa-layer-group"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>42</h3>
-                    <p>Active Customers</p>
+                    <h3 id="sales-items-sold">0</h3>
+                    <p>Items Sold</p>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon danger">
-                    <i class="fas fa-percentage"></i>
+                    <i class="fas fa-dollar-sign"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>18.5%</h3>
-                    <p>Conversion Rate</p>
+                    <h3 id="sales-average-order">$0.00</h3>
+                    <p>Average Order Value</p>
                 </div>
             </div>
         </div>

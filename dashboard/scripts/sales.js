@@ -1,150 +1,429 @@
-// Sample product data
-const products = {
-    "123456789012": {
-        id: 1,
-        name: "Classic Cotton T-Shirt",
-        brand: "FashionBase",
-        category: "Tops",
-        size: "M",
-        color: "White",
-        price: 24.99,
-        stock: 45,
-        image: "https://via.placeholder.com/60x60/6c5ce7/ffffff?text=T"
-    },
-    "234567890123": {
-        id: 2,
-        name: "Slim Fit Jeans",
-        brand: "DenimCo",
-        category: "Bottoms",
-        size: "32",
-        color: "Dark Blue",
-        price: 59.99,
-        stock: 12,
-        image: "https://via.placeholder.com/60x60/6c5ce7/ffffff?text=J"
-    },
-    "345678901234": {
-        id: 3,
-        name: "Winter Jacket",
-        brand: "OutdoorGear",
-        category: "Outerwear",
-        size: "L",
-        color: "Black",
-        price: 129.99,
-        stock: 8,
-        image: "https://via.placeholder.com/60x60/6c5ce7/ffffff?text=W"
-    },
-    "456789012345": {
-        id: 4,
-        name: "Sports Hoodie",
-        brand: "ActiveWear",
-        category: "Tops",
-        size: "XL",
-        color: "Gray",
-        price: 49.99,
-        stock: 28,
-        image: "https://via.placeholder.com/60x60/6c5ce7/ffffff?text=H"
-    }
-};
+const API_BASE = '';
+const TAX_RATE = 0.085;
 
-// Sample sales data
-const recentSales = [
-    {
-        id: "S-1001",
-        date: "2023-11-15 14:30",
-        customer: "John Smith",
-        items: 3,
-        total: 134.97,
-        payment: "Credit Card",
-        status: "completed"
-    },
-    {
-        id: "S-1002",
-        date: "2023-11-15 13:15",
-        customer: "Emma Johnson",
-        items: 2,
-        total: 89.98,
-        payment: "Cash",
-        status: "completed"
-    },
-    {
-        id: "S-1003",
-        date: "2023-11-15 12:05",
-        customer: "Michael Brown",
-        items: 1,
-        total: 59.99,
-        payment: "Debit Card",
-        status: "completed"
-    },
-    {
-        id: "S-1004",
-        date: "2023-11-15 11:20",
-        customer: "Sarah Davis",
-        items: 4,
-        total: 204.96,
-        payment: "Credit Card",
-        status: "pending"
-    },
-    {
-        id: "S-1005",
-        date: "2023-11-14 16:45",
-        customer: "Robert Wilson",
-        items: 2,
-        total: 74.98,
-        payment: "Cash",
-        status: "cancelled"
-    }
-];
-
-// DOM Elements
 const cameraFeed = document.getElementById('camera-feed');
+if (cameraFeed) {
+    cameraFeed.setAttribute('playsinline', '');
+    cameraFeed.setAttribute('autoplay', '');
+    cameraFeed.setAttribute('muted', '');
+    cameraFeed.muted = true;
+}
+
 const startScannerBtn = document.getElementById('start-scanner');
 const stopScannerBtn = document.getElementById('stop-scanner');
 const manualEntryBtn = document.getElementById('manual-entry');
-const cartItems = document.getElementById('cart-items');
+const cartItemsContainer = document.getElementById('cart-items');
 const emptyCartMessage = document.getElementById('empty-cart-message');
-const cartSubtotal = document.getElementById('cart-subtotal');
-const cartTax = document.getElementById('cart-tax');
-const cartTotal = document.getElementById('cart-total');
+const cartSubtotalEl = document.getElementById('cart-subtotal');
+const cartTaxEl = document.getElementById('cart-tax');
+const cartTotalEl = document.getElementById('cart-total');
 const checkoutBtn = document.getElementById('checkout-btn');
 const clearCartBtn = document.getElementById('clear-cart');
 const salesTableBody = document.getElementById('sales-table-body');
 const newSaleBtn = document.getElementById('new-sale-btn');
+const refreshSalesBtn = document.getElementById('refresh-sales');
 
-// Cart state
+const salesTotalRevenueEl = document.getElementById('sales-total-revenue');
+const salesTransactionCountEl = document.getElementById('sales-transaction-count');
+const salesItemsSoldEl = document.getElementById('sales-items-sold');
+const salesAverageOrderEl = document.getElementById('sales-average-order');
+
 let cart = [];
 let scannerActive = false;
-let stream = null;
+let quaggaInitialized = false;
+let lockedBarcode = null;
+let lookupInFlight = false;
 
-// Initialize the sales table
-function initializeSalesTable() {
-    salesTableBody.innerHTML = '';
-    
-    recentSales.forEach(sale => {
-        const row = document.createElement('tr');
-        
-        // Determine status class and text
-        let statusClass = '';
-        let statusText = '';
-        
-        if (sale.status === 'completed') {
-            statusClass = 'status-completed';
-            statusText = 'Completed';
-        } else if (sale.status === 'pending') {
-            statusClass = 'status-pending';
-            statusText = 'Pending';
-        } else {
-            statusClass = 'status-cancelled';
-            statusText = 'Cancelled';
+function formatCurrency(value) {
+    const number = Number(value);
+    if (Number.isNaN(number)) {
+        return '$0.00';
+    }
+
+    return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+    }).format(number);
+}
+
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+    });
+
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Request failed');
+    }
+
+    return response.json();
+}
+
+function resetCart() {
+    cart = [];
+    updateCartDisplay();
+}
+
+function updateCartDisplay() {
+    if (!cartItemsContainer) {
+        return;
+    }
+
+    cartItemsContainer.innerHTML = '';
+
+    if (cart.length === 0) {
+        if (emptyCartMessage) {
+            cartItemsContainer.appendChild(emptyCartMessage);
         }
-        
+        if (checkoutBtn) {
+            checkoutBtn.disabled = true;
+        }
+        return;
+    }
+
+    cart.forEach(item => {
+        const cartItem = document.createElement('div');
+        cartItem.className = 'cart-item';
+        cartItem.innerHTML = `
+            <div class="item-image">
+                ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}">` : '<i class="fas fa-image"></i>'}
+            </div>
+            <div class="item-details">
+                <div class="item-title">${item.name}</div>
+                <div class="item-meta">${item.brand ?? ''} ${item.size ? `• ${item.size}` : ''} ${item.color ? `• ${item.color}` : ''}</div>
+                <div class="item-quantity">
+                    <button class="quantity-btn" data-action="decrease" data-barcode="${item.barcode}">-</button>
+                    <span>${item.quantity}</span>
+                    <button class="quantity-btn" data-action="increase" data-barcode="${item.barcode}">+</button>
+                </div>
+            </div>
+            <div class="item-price">${formatCurrency(item.price * item.quantity)}</div>
+            <button class="remove-item" data-barcode="${item.barcode}"><i class="fas fa-times"></i></button>
+        `;
+
+        cartItemsContainer.appendChild(cartItem);
+    });
+
+    if (checkoutBtn) {
+        checkoutBtn.disabled = false;
+    }
+
+    updateCartTotals();
+}
+
+function updateCartTotals() {
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const tax = subtotal * TAX_RATE;
+    const total = subtotal + tax;
+
+    if (cartSubtotalEl) {
+        cartSubtotalEl.textContent = formatCurrency(subtotal);
+    }
+    if (cartTaxEl) {
+        cartTaxEl.textContent = formatCurrency(tax);
+    }
+    if (cartTotalEl) {
+        cartTotalEl.textContent = formatCurrency(total);
+    }
+}
+
+function addProductToCart(product) {
+    const existing = cart.find(item => item.barcode === product.barcode);
+
+    if (existing) {
+        if (existing.quantity + 1 > product.stock) {
+            alert('Not enough stock to add another item.');
+            return;
+        }
+        existing.quantity += 1;
+    } else {
+        if (product.stock <= 0) {
+            alert('This product is out of stock.');
+            return;
+        }
+
+        cart.push({
+            barcode: product.barcode,
+            name: product.name,
+            brand: product.brand,
+            size: product.size,
+            color: product.color,
+            price: Number(product.price),
+            stock: Number(product.stock),
+            image_url: product.image_url,
+            quantity: 1,
+        });
+    }
+
+    updateCartDisplay();
+}
+
+function removeProductFromCart(barcode) {
+    cart = cart.filter(item => item.barcode !== barcode);
+    updateCartDisplay();
+}
+
+function adjustQuantity(barcode, direction) {
+    const item = cart.find(cartItem => cartItem.barcode === barcode);
+    if (!item) {
+        return;
+    }
+
+    if (direction === 'increase') {
+        if (item.quantity + 1 > item.stock) {
+            alert('Not enough stock available.');
+            return;
+        }
+        item.quantity += 1;
+    } else if (direction === 'decrease') {
+        item.quantity -= 1;
+        if (item.quantity <= 0) {
+            removeProductFromCart(barcode);
+            return;
+        }
+    }
+
+    updateCartDisplay();
+}
+
+async function lookupProduct(barcode) {
+    try {
+        const product = await fetchJson(`${API_BASE}/products/${encodeURIComponent(barcode)}`);
+        addProductToCart(product);
+    } catch (error) {
+        console.error('Product lookup failed:', error);
+        alert('Unable to find product for barcode ' + barcode);
+    }
+}
+
+async function submitSale() {
+    if (cart.length === 0) {
+        return;
+    }
+
+    const items = cart.map(item => ({
+        barcode: item.barcode,
+        quantity: item.quantity,
+    }));
+
+    const payload = {
+        items,
+        cart_total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+        payment_method: 'POS',
+        date: new Date().toISOString(),
+    };
+
+    try {
+        await fetchJson(`${API_BASE}/sales`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+
+        alert('Sale recorded successfully.');
+        resetCart();
+        await loadSales();
+    } catch (error) {
+        console.error('Unable to record sale:', error);
+        alert('Unable to record the sale. Please try again.');
+    }
+}
+
+function attachCartListeners() {
+    if (!cartItemsContainer) {
+        return;
+    }
+
+    cartItemsContainer.addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (!button) {
+            return;
+        }
+
+        if (button.classList.contains('remove-item')) {
+            const barcode = button.getAttribute('data-barcode');
+            removeProductFromCart(barcode);
+        }
+
+        if (button.classList.contains('quantity-btn')) {
+            const action = button.getAttribute('data-action');
+            const barcode = button.getAttribute('data-barcode');
+            adjustQuantity(barcode, action);
+        }
+    });
+}
+
+function teardownQuagga() {
+    if (!quaggaInitialized) {
+        return;
+    }
+
+    Quagga.offDetected(handleBarcodeDetected);
+    Quagga.stop();
+    Quagga.CameraAccess.release();
+    quaggaInitialized = false;
+}
+
+const handleBarcodeDetected = data => {
+    if (!data || !data.codeResult || !data.codeResult.code) {
+        return;
+    }
+
+    const code = data.codeResult.code.trim();
+
+    if (!code || code === lockedBarcode || lookupInFlight) {
+        return;
+    }
+
+    lockedBarcode = code;
+    lookupInFlight = true;
+
+    lookupProduct(code)
+        .catch(error => console.error(error))
+        .finally(() => {
+            lookupInFlight = false;
+            setTimeout(() => {
+                lockedBarcode = null;
+            }, 1500);
+        });
+};
+
+async function startScanner() {
+    if (!cameraFeed || scannerActive) {
+        return;
+    }
+
+    try {
+        await new Promise((resolve, reject) => {
+            const config = {
+                inputStream: {
+                    type: 'LiveStream',
+                    target: cameraFeed,
+                    constraints: {
+                        facingMode: 'environment',
+                    },
+                },
+                decoder: {
+                    readers: [
+                        'code_128_reader',
+                        'ean_reader',
+                        'ean_8_reader',
+                        'upc_reader',
+                        'upc_e_reader',
+                        'code_39_reader',
+                        'code_39_vin_reader',
+                        'codabar_reader',
+                        'i2of5_reader',
+                        '2of5_reader',
+                    ],
+                },
+                locate: true,
+            };
+
+            Quagga.init(config, err => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                Quagga.onDetected(handleBarcodeDetected);
+                Quagga.start();
+                quaggaInitialized = true;
+                resolve();
+            });
+        });
+
+        scannerActive = true;
+        lockedBarcode = null;
+
+        if (startScannerBtn) {
+            startScannerBtn.disabled = true;
+        }
+
+        if (stopScannerBtn) {
+            stopScannerBtn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Unable to start camera:', error);
+        alert('Unable to access camera. Please check permissions and try again.');
+        teardownQuagga();
+        scannerActive = false;
+        if (startScannerBtn) {
+            startScannerBtn.disabled = false;
+        }
+        if (stopScannerBtn) {
+            stopScannerBtn.disabled = true;
+        }
+    }
+}
+
+function stopScanner() {
+    teardownQuagga();
+    scannerActive = false;
+
+    if (cameraFeed && cameraFeed.srcObject) {
+        cameraFeed.srcObject.getTracks().forEach(track => track.stop());
+        cameraFeed.srcObject = null;
+    }
+
+    if (startScannerBtn) {
+        startScannerBtn.disabled = false;
+    }
+
+    if (stopScannerBtn) {
+        stopScannerBtn.disabled = true;
+    }
+}
+
+function manualEntry() {
+    const code = prompt('Enter barcode manually:');
+    if (code) {
+        lookupProduct(code.trim());
+    }
+}
+
+async function loadSales() {
+    try {
+        const sales = await fetchJson(`${API_BASE}/sales`);
+        renderSalesTable(sales);
+        updateSalesStats(sales);
+    } catch (error) {
+        console.error('Unable to load sales:', error);
+        if (salesTableBody) {
+            salesTableBody.innerHTML = '<tr><td colspan="6">Unable to load sales data.</td></tr>';
+        }
+    }
+}
+
+function renderSalesTable(sales) {
+    if (!salesTableBody) {
+        return;
+    }
+
+    salesTableBody.innerHTML = '';
+
+    if (!sales || sales.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 6;
+        cell.textContent = 'No sales recorded yet.';
+        row.appendChild(cell);
+        salesTableBody.appendChild(row);
+        return;
+    }
+
+    sales.forEach(sale => {
+        const row = document.createElement('tr');
+        const items = Array.isArray(sale.items) ? sale.items : [];
+        const itemSummary = items.map(item => `${item.name} (${item.quantity})`).join(', ');
+
         row.innerHTML = `
             <td>${sale.id}</td>
-            <td>${sale.date}</td>
-            <td>${sale.customer}</td>
-            <td>${sale.items}</td>
-            <td>$${sale.total.toFixed(2)}</td>
-            <td>${sale.payment}</td>
-            <td><span class="status ${statusClass}">${statusText}</span></td>
+            <td>${new Date(sale.date).toLocaleString()}</td>
+            <td>${itemSummary || 'N/A'}</td>
+            <td>${formatCurrency(sale.total)}</td>
+            <td><span class="status status-completed">Completed</span></td>
             <td>
                 <div class="action-buttons">
                     <button class="action-btn view-btn" data-id="${sale.id}">
@@ -159,275 +438,87 @@ function initializeSalesTable() {
                 </div>
             </td>
         `;
-        
+
         salesTableBody.appendChild(row);
     });
-
-    // Add event listeners to action buttons
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const saleId = btn.getAttribute('data-id');
-            viewSale(saleId);
-        });
-    });
-
-    document.querySelectorAll('.receipt-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const saleId = btn.getAttribute('data-id');
-            printReceipt(saleId);
-        });
-    });
-
-    document.querySelectorAll('.return-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const saleId = btn.getAttribute('data-id');
-            processReturn(saleId);
-        });
-    });
 }
 
-// Update cart display
-function updateCartDisplay() {
-    cartItems.innerHTML = '';
-    
-    if (cart.length === 0) {
-        cartItems.appendChild(emptyCartMessage);
-        checkoutBtn.disabled = true;
-    } else {
-        emptyCartMessage.remove();
-        checkoutBtn.disabled = false;
-        
-        cart.forEach(item => {
-            const cartItem = document.createElement('div');
-            cartItem.className = 'cart-item';
-            cartItem.innerHTML = `
-                <div class="item-image">
-                    <img src="${item.image}" alt="${item.name}">
-                </div>
-                <div class="item-details">
-                    <div class="item-name">${item.name}</div>
-                    <div class="item-info">${item.brand} | ${item.size} | ${item.color}</div>
-                    <div class="item-price">$${item.price.toFixed(2)}</div>
-                </div>
-                <div class="item-quantity">
-                    <button class="quantity-btn decrease-btn" data-id="${item.id}">-</button>
-                    <input type="text" class="quantity-input" value="${item.quantity}" readonly>
-                    <button class="quantity-btn increase-btn" data-id="${item.id}">+</button>
-                </div>
-                <div class="item-total">$${(item.price * item.quantity).toFixed(2)}</div>
-                <button class="remove-item" data-id="${item.id}">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
-            cartItems.appendChild(cartItem);
-        });
-        
-        // Add event listeners to cart item buttons
-        document.querySelectorAll('.decrease-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const productId = btn.getAttribute('data-id');
-                decreaseQuantity(productId);
-            });
-        });
-        
-        document.querySelectorAll('.increase-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const productId = btn.getAttribute('data-id');
-                increaseQuantity(productId);
-            });
-        });
-        
-        document.querySelectorAll('.remove-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const productId = btn.getAttribute('data-id');
-                removeFromCart(productId);
-            });
+function updateSalesStats(sales) {
+    if (!sales) {
+        return;
+    }
+
+    const totalRevenue = sales.reduce((sum, sale) => sum + Number(sale.total || 0), 0);
+    const transactionCount = sales.length;
+    const itemsSold = sales.reduce((sum, sale) => sum + Number(sale.quantity_sold || 0), 0);
+    const averageOrderValue = transactionCount === 0 ? 0 : totalRevenue / transactionCount;
+
+    if (salesTotalRevenueEl) {
+        salesTotalRevenueEl.textContent = formatCurrency(totalRevenue);
+    }
+    if (salesTransactionCountEl) {
+        salesTransactionCountEl.textContent = transactionCount.toString();
+    }
+    if (salesItemsSoldEl) {
+        salesItemsSoldEl.textContent = itemsSold.toString();
+    }
+    if (salesAverageOrderEl) {
+        salesAverageOrderEl.textContent = formatCurrency(averageOrderValue);
+    }
+}
+
+function attachEventListeners() {
+    if (newSaleBtn) {
+        newSaleBtn.addEventListener('click', () => {
+            resetCart();
         });
     }
-    
-    updateCartSummary();
-}
 
-// Update cart summary
-function updateCartSummary() {
-    const subtotal = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
-    const tax = subtotal * 0.085; // 8.5% tax
-    const total = subtotal + tax;
-    
-    cartSubtotal.textContent = `$${subtotal.toFixed(2)}`;
-    cartTax.textContent = `$${tax.toFixed(2)}`;
-    cartTotal.textContent = `$${total.toFixed(2)}`;
-}
+    if (startScannerBtn) {
+        startScannerBtn.addEventListener('click', startScanner);
+    }
 
-// Add product to cart
-function addToCart(product) {
-    const existingItem = cart.find(item => item.id === product.id);
-    
-    if (existingItem) {
-        existingItem.quantity += 1;
-    } else {
-        cart.push({
-            ...product,
-            quantity: 1
+    if (stopScannerBtn) {
+        stopScannerBtn.addEventListener('click', stopScanner);
+    }
+
+    if (manualEntryBtn) {
+        manualEntryBtn.addEventListener('click', manualEntry);
+    }
+
+    if (clearCartBtn) {
+        clearCartBtn.addEventListener('click', resetCart);
+    }
+
+    if (checkoutBtn) {
+        checkoutBtn.addEventListener('click', submitSale);
+    }
+
+    if (refreshSalesBtn) {
+        refreshSalesBtn.addEventListener('click', loadSales);
+    }
+
+    attachCartListeners();
+
+    if (salesTableBody) {
+        salesTableBody.addEventListener('click', event => {
+            const button = event.target.closest('button');
+            if (!button) {
+                return;
+            }
+
+            const saleId = button.getAttribute('data-id');
+            if (button.classList.contains('view-btn')) {
+                alert(`View details for sale ${saleId}`);
+            } else if (button.classList.contains('receipt-btn')) {
+                alert(`Generate receipt for sale ${saleId}`);
+            } else if (button.classList.contains('return-btn')) {
+                alert(`Initiate return for sale ${saleId}`);
+            }
         });
     }
-    
-    updateCartDisplay();
 }
 
-// Increase item quantity
-function increaseQuantity(productId) {
-    const item = cart.find(item => item.id == productId);
-    if (item) {
-        item.quantity += 1;
-        updateCartDisplay();
-    }
-}
-
-// Decrease item quantity
-function decreaseQuantity(productId) {
-    const item = cart.find(item => item.id == productId);
-    if (item) {
-        if (item.quantity > 1) {
-            item.quantity -= 1;
-        } else {
-            removeFromCart(productId);
-            return;
-        }
-        updateCartDisplay();
-    }
-}
-
-// Remove item from cart
-function removeFromCart(productId) {
-    cart = cart.filter(item => item.id != productId);
-    updateCartDisplay();
-}
-
-// Clear cart
-function clearCart() {
-    if (cart.length > 0 && confirm('Are you sure you want to clear the cart?')) {
-        cart = [];
-        updateCartDisplay();
-    }
-}
-
-// Process checkout
-function processCheckout() {
-    if (cart.length === 0) return;
-    
-    alert('Processing payment... Sale completed successfully!');
-    // In a real application, this would process the payment and complete the sale
-    
-    // Reset cart after successful checkout
-    cart = [];
-    updateCartDisplay();
-}
-
-// Start the barcode scanner
-async function startScanner() {
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { 
-                facingMode: 'environment',
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            } 
-        });
-        
-        cameraFeed.srcObject = stream;
-        scannerActive = true;
-        
-        startScannerBtn.disabled = true;
-        stopScannerBtn.disabled = false;
-        
-        // Simulate barcode detection for demo purposes
-        simulateBarcodeDetection();
-        
-    } catch (error) {
-        console.error('Error accessing camera:', error);
-        alert('Unable to access camera. Please check permissions and try again.');
-    }
-}
-
-// Stop the barcode scanner
-function stopScanner() {
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
-    
-    cameraFeed.srcObject = null;
-    scannerActive = false;
-    
-    startScannerBtn.disabled = false;
-    stopScannerBtn.disabled = true;
-}
-
-// Simulate barcode detection for demo
-function simulateBarcodeDetection() {
-    if (!scannerActive) return;
-    
-    // Randomly select a barcode from our products
-    const barcodes = Object.keys(products);
-    const randomBarcode = barcodes[Math.floor(Math.random() * barcodes.length)];
-    
-    // Simulate scanning after a random delay (1-3 seconds)
-    setTimeout(() => {
-        if (scannerActive) {
-            processBarcode(randomBarcode);
-            
-            // Continue scanning
-            simulateBarcodeDetection();
-        }
-    }, 1000 + Math.random() * 2000);
-}
-
-// Process the scanned barcode
-function processBarcode(code) {
-    if (products[code]) {
-        addToCart(products[code]);
-    } else {
-        alert('Product not found in inventory!');
-    }
-}
-
-// Manual barcode entry
-function manualEntry() {
-    const code = prompt('Enter barcode manually:');
-    if (code) {
-        processBarcode(code);
-    }
-}
-
-// Sales actions
-function viewSale(id) {
-    alert(`Viewing details for sale: ${id}`);
-}
-
-function printReceipt(id) {
-    alert(`Printing receipt for sale: ${id}`);
-}
-
-function processReturn(id) {
-    if (confirm(`Process return for sale ${id}?`)) {
-        alert(`Return processed for sale: ${id}`);
-    }
-}
-
-// Event Listeners
-startScannerBtn.addEventListener('click', startScanner);
-stopScannerBtn.addEventListener('click', stopScanner);
-manualEntryBtn.addEventListener('click', manualEntry);
-checkoutBtn.addEventListener('click', processCheckout);
-clearCartBtn.addEventListener('click', clearCart);
-newSaleBtn.addEventListener('click', clearCart);
-
-// Initialize the page
-initializeSalesTable();
+attachEventListeners();
 updateCartDisplay();
-
-// Demo: Add a product to cart for demonstration
-setTimeout(() => {
-    addToCart(products["123456789012"]);
-}, 1000);
+loadSales();

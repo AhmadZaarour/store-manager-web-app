@@ -46,7 +46,7 @@
                     <i class="fas fa-file-export"></i>
                     Export
                 </button>
-                <button class="btn btn-secondary">
+                <button class="btn btn-secondary" id="refresh-inventory">
                     <i class="fas fa-sync"></i>
                     Refresh
                 </button>
@@ -60,7 +60,7 @@
                     <i class="fas fa-tshirt"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>1,247</h3>
+                    <h3 id="inventory-total-products">0</h3>
                     <p>Total Products</p>
                 </div>
             </div>
@@ -69,7 +69,7 @@
                     <i class="fas fa-check-circle"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>892</h3>
+                    <h3 id="inventory-in-stock">0</h3>
                     <p>In Stock</p>
                 </div>
             </div>
@@ -78,7 +78,7 @@
                     <i class="fas fa-exclamation-triangle"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>187</h3>
+                    <h3 id="inventory-low-stock">0</h3>
                     <p>Low Stock</p>
                 </div>
             </div>
@@ -87,7 +87,7 @@
                     <i class="fas fa-times-circle"></i>
                 </div>
                 <div class="stat-info">
-                    <h3>168</h3>
+                    <h3 id="inventory-out-of-stock">0</h3>
                     <p>Out of Stock</p>
                 </div>
             </div>
@@ -214,11 +214,11 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Product Name</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" class="form-input" name="name" id="modal-product-name" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Brand</label>
-                            <select class="form-select" required>
+                            <select class="form-select" name="brand" id="modal-product-brand" required>
                                 <option value="">Select Brand</option>
                                 <option value="FashionBase">FashionBase</option>
                                 <option value="DenimCo">DenimCo</option>
@@ -231,7 +231,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Category</label>
-                            <select class="form-select" required>
+                            <select class="form-select" name="category" id="modal-product-category" required>
                                 <option value="">Select Category</option>
                                 <option value="Tops">Tops</option>
                                 <option value="Bottoms">Bottoms</option>
@@ -242,13 +242,13 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Barcode</label>
-                            <input type="text" class="form-input" placeholder="Scan or enter barcode">
+                            <input type="text" class="form-input" name="barcode" id="modal-product-barcode" placeholder="Scan or enter barcode" required>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Size</label>
-                            <select class="form-select" required>
+                            <select class="form-select" name="size" id="modal-product-size" required>
                                 <option value="">Select Size</option>
                                 <option value="XS">XS</option>
                                 <option value="S">S</option>
@@ -259,22 +259,22 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Color</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" class="form-input" name="color" id="modal-product-color" required>
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">Price</label>
-                            <input type="number" class="form-input" step="0.01" required>
+                            <input type="number" class="form-input" name="price" id="modal-product-price" step="0.01" min="0" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Stock Quantity</label>
-                            <input type="number" class="form-input" required>
+                            <input type="number" class="form-input" name="stock" id="modal-product-stock" min="0" required>
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Description</label>
-                        <textarea class="form-textarea"></textarea>
+                        <textarea class="form-textarea" name="description" id="modal-product-description" placeholder="Optional notes about the product"></textarea>
                     </div>
                 </form>
             </div>

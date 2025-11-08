@@ -1,68 +1,13 @@
-// Sample product data
-const products = {
-    "123456789012": {
-        name: "Classic Cotton T-Shirt",
-        brand: "FashionBase",
-        category: "Tops",
-        size: "M",
-        color: "White",
-        price: "$24.99",
-        stock: 45,
-        status: "in-stock",
-        image: "https://via.placeholder.com/300x300/6c5ce7/ffffff?text=T-Shirt"
-    },
-    "234567890123": {
-        name: "Slim Fit Jeans",
-        brand: "DenimCo",
-        category: "Bottoms",
-        size: "32",
-        color: "Dark Blue",
-        price: "$59.99",
-        stock: 12,
-        status: "low",
-        image: "https://via.placeholder.com/300x300/6c5ce7/ffffff?text=Jeans"
-    },
-    "345678901234": {
-        name: "Winter Jacket",
-        brand: "OutdoorGear",
-        category: "Outerwear",
-        size: "L",
-        color: "Black",
-        price: "$129.99",
-        stock: 0,
-        status: "out",
-        image: "https://via.placeholder.com/300x300/6c5ce7/ffffff?text=Jacket"
-    },
-    "456789012345": {
-        name: "Sports Hoodie",
-        brand: "ActiveWear",
-        category: "Tops",
-        size: "XL",
-        color: "Gray",
-        price: "$49.99",
-        stock: 28,
-        status: "in-stock",
-        image: "https://via.placeholder.com/300x300/6c5ce7/ffffff?text=Hoodie"
-    },
-    "567890123456": {
-        name: "Summer Dress",
-        brand: "Elegance",
-        category: "Dresses",
-        size: "S",
-        color: "Floral",
-        price: "$79.99",
-        stock: 7,
-        status: "low",
-        image: "https://via.placeholder.com/300x300/6c5ce7/ffffff?text=Dress"
-    }
-};
+const API_BASE = '';
 
-// DOM Elements
 const cameraFeed = document.getElementById('camera-feed');
-cameraFeed.setAttribute('playsinline', '');
-cameraFeed.setAttribute('autoplay', '');
-cameraFeed.setAttribute('muted', '');
-cameraFeed.muted = true;
+cameraFeed?.setAttribute('playsinline', '');
+cameraFeed?.setAttribute('autoplay', '');
+cameraFeed?.setAttribute('muted', '');
+if (cameraFeed) {
+    cameraFeed.muted = true;
+}
+
 const startScannerBtn = document.getElementById('start-scanner');
 const stopScannerBtn = document.getElementById('stop-scanner');
 const manualEntryBtn = document.getElementById('manual-entry');
@@ -80,10 +25,184 @@ const productStock = document.getElementById('product-stock');
 const productStatus = document.getElementById('product-status');
 const inventoryTableBody = document.getElementById('inventory-table-body');
 
-// Scanner state
 let scannerActive = false;
 let quaggaInitialized = false;
 let lockedBarcode = null;
+let lookupInFlight = false;
+let inventory = [];
+
+function formatCurrency(value) {
+    const number = Number(value);
+    if (Number.isNaN(number)) {
+        return '$0.00';
+    }
+
+    return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+    }).format(number);
+}
+
+function getStockStatus(stock) {
+    const quantity = Number(stock) || 0;
+
+    if (quantity === 0) {
+        return { key: 'out', label: 'Out of Stock' };
+    }
+
+    if (quantity <= 10) {
+        return { key: 'low', label: 'Low Stock' };
+    }
+
+    return { key: 'in-stock', label: 'In Stock' };
+}
+
+async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+    });
+
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Request failed');
+    }
+
+    return response.json();
+}
+
+function renderInventoryTable(products) {
+    if (!inventoryTableBody) {
+        return;
+    }
+
+    inventoryTableBody.innerHTML = '';
+
+    if (!products || products.length === 0) {
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 8;
+        cell.textContent = 'No products available. Add a product to get started.';
+        row.appendChild(cell);
+        inventoryTableBody.appendChild(row);
+        return;
+    }
+
+    products.forEach(product => {
+        const row = document.createElement('tr');
+        const status = getStockStatus(product.stock);
+
+        row.innerHTML = `
+            <td>${product.barcode ?? '-'}</td>
+            <td>${product.name ?? '-'}</td>
+            <td>${product.category ?? '-'}</td>
+            <td>${product.size ?? '-'}</td>
+            <td>${product.color ?? '-'}</td>
+            <td>${formatCurrency(product.price)}</td>
+            <td>${product.stock ?? 0}</td>
+            <td><span class="status status-${status.key}">${status.label}</span></td>
+        `;
+
+        inventoryTableBody.appendChild(row);
+    });
+}
+
+function resetProductDetails() {
+    barcodeFormats.innerHTML = '';
+    productName.textContent = '-';
+    productBrand.textContent = '-';
+    productCategory.textContent = '-';
+    productSize.textContent = '-';
+    productColor.textContent = '-';
+    productPrice.textContent = '-';
+    productStock.textContent = '-';
+    productStatus.textContent = '-';
+    productStatus.className = 'status';
+    productImage.style.display = 'none';
+    productPlaceholder.style.display = 'block';
+}
+
+function populateProductDetails(product) {
+    if (!product) {
+        resetProductDetails();
+        return;
+    }
+
+    productName.textContent = product.name ?? 'Unknown Product';
+    productBrand.textContent = product.brand ?? '-';
+    productCategory.textContent = product.category ?? '-';
+    productSize.textContent = product.size ?? '-';
+    productColor.textContent = product.color ?? '-';
+    productPrice.textContent = formatCurrency(product.price);
+    productStock.textContent = product.stock ?? 0;
+
+    const status = getStockStatus(product.stock);
+    productStatus.textContent = status.label;
+    productStatus.className = `status status-${status.key}`;
+
+    if (product.image_url) {
+        productImage.src = product.image_url;
+        productImage.style.display = 'block';
+        productPlaceholder.style.display = 'none';
+    } else {
+        productImage.removeAttribute('src');
+        productImage.style.display = 'none';
+        productPlaceholder.style.display = 'block';
+    }
+}
+
+function displayBarcodeFormats(code) {
+    if (!barcodeFormats) {
+        return;
+    }
+
+    barcodeFormats.innerHTML = '';
+
+    const formats = [
+        { name: 'UPC-A', value: code },
+        { name: 'EAN-13', value: code },
+        { name: 'Code 128', value: `{${code}}` },
+        { name: 'Code 39', value: `*${code}*` },
+    ];
+
+    formats.forEach(format => {
+        const tag = document.createElement('span');
+        tag.className = 'format-tag';
+        tag.textContent = `${format.name}: ${format.value}`;
+        barcodeFormats.appendChild(tag);
+    });
+}
+
+async function processBarcode(code) {
+    if (!code) {
+        return;
+    }
+
+    if (barcodeValue) {
+        barcodeValue.textContent = code;
+    }
+
+    displayBarcodeFormats(code);
+
+    try {
+        const product = await fetchJson(`${API_BASE}/products/${encodeURIComponent(code)}`);
+        populateProductDetails(product);
+    } catch (error) {
+        console.error('Product lookup failed:', error);
+        productName.textContent = 'Product Not Found';
+        productBrand.textContent = '-';
+        productCategory.textContent = '-';
+        productSize.textContent = '-';
+        productColor.textContent = '-';
+        productPrice.textContent = '-';
+        productStock.textContent = '-';
+        productStatus.textContent = 'Unknown';
+        productStatus.className = 'status';
+        productImage.style.display = 'none';
+        productPlaceholder.style.display = 'block';
+    }
+}
 
 const handleBarcodeDetected = data => {
     if (!data || !data.codeResult || !data.codeResult.code) {
@@ -92,12 +211,21 @@ const handleBarcodeDetected = data => {
 
     const code = data.codeResult.code.trim();
 
-    if (!code || code === lockedBarcode) {
+    if (!code || code === lockedBarcode || lookupInFlight) {
         return;
     }
 
     lockedBarcode = code;
-    processBarcode(code);
+    lookupInFlight = true;
+
+    processBarcode(code)
+        .catch(error => console.error(error))
+        .finally(() => {
+            lookupInFlight = false;
+            setTimeout(() => {
+                lockedBarcode = null;
+            }, 1500);
+        });
 };
 
 function teardownQuagga() {
@@ -111,44 +239,6 @@ function teardownQuagga() {
     quaggaInitialized = false;
 }
 
-// Initialize the inventory table
-function initializeInventoryTable() {
-    inventoryTableBody.innerHTML = '';
-    
-    Object.entries(products).forEach(([barcode, product]) => {
-        const row = document.createElement('tr');
-        
-        // Determine status class and text
-        let statusClass = '';
-        let statusText = '';
-        
-        if (product.status === 'in-stock') {
-            statusClass = 'status-in-stock';
-            statusText = 'In Stock';
-        } else if (product.status === 'low') {
-            statusClass = 'status-low';
-            statusText = 'Low Stock';
-        } else {
-            statusClass = 'status-out';
-            statusText = 'Out of Stock';
-        }
-        
-        row.innerHTML = `
-            <td>${barcode}</td>
-            <td>${product.name}</td>
-            <td>${product.category}</td>
-            <td>${product.size}</td>
-            <td>${product.color}</td>
-            <td>${product.price}</td>
-            <td>${product.stock}</td>
-            <td><span class="status ${statusClass}">${statusText}</span></td>
-        `;
-        
-        inventoryTableBody.appendChild(row);
-    });
-}
-
-// Start the barcode scanner
 async function startScanner() {
     if (scannerActive) {
         return;
@@ -163,8 +253,8 @@ async function startScanner() {
                     constraints: {
                         facingMode: 'environment',
                         width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
+                        height: { ideal: 720 },
+                    },
                 },
                 decoder: {
                     readers: [
@@ -177,10 +267,10 @@ async function startScanner() {
                         'code_39_vin_reader',
                         'codabar_reader',
                         'i2of5_reader',
-                        '2of5_reader'
-                    ]
+                        '2of5_reader',
+                    ],
                 },
-                locate: true
+                locate: true,
             };
 
             Quagga.init(config, err => {
@@ -199,19 +289,26 @@ async function startScanner() {
         scannerActive = true;
         lockedBarcode = null;
 
-        startScannerBtn.disabled = true;
-        stopScannerBtn.disabled = false;
+        if (startScannerBtn) {
+            startScannerBtn.disabled = true;
+        }
+        if (stopScannerBtn) {
+            stopScannerBtn.disabled = false;
+        }
     } catch (error) {
         console.error('Error starting scanner:', error);
         alert('Unable to access camera. Please check permissions and try again.');
         teardownQuagga();
         scannerActive = false;
-        startScannerBtn.disabled = false;
-        stopScannerBtn.disabled = true;
+        if (startScannerBtn) {
+            startScannerBtn.disabled = false;
+        }
+        if (stopScannerBtn) {
+            stopScannerBtn.disabled = true;
+        }
     }
 }
 
-// Stop the barcode scanner
 function stopScanner() {
     teardownQuagga();
 
@@ -223,91 +320,43 @@ function stopScanner() {
     lockedBarcode = null;
     scannerActive = false;
 
-    startScannerBtn.disabled = false;
-    stopScannerBtn.disabled = true;
-}
-
-// Process the scanned barcode
-function processBarcode(code) {
-    // Display the barcode value
-    barcodeValue.textContent = code;
-    
-    // Generate different format representations
-    const formats = [
-        { name: 'UPC-A', value: code },
-        { name: 'EAN-13', value: code },
-        { name: 'Code 128', value: `{${code}}` },
-        { name: 'Code 39', value: `*${code}*` }
-    ];
-    
-    // Display format tags
-    barcodeFormats.innerHTML = '';
-    formats.forEach(format => {
-        const tag = document.createElement('span');
-        tag.className = 'format-tag';
-        tag.textContent = `${format.name}: ${format.value}`;
-        barcodeFormats.appendChild(tag);
-    });
-    
-    // Look up product information
-    if (products[code]) {
-        const product = products[code];
-        
-        // Update product details
-        productName.textContent = product.name;
-        productBrand.textContent = product.brand;
-        productCategory.textContent = product.category;
-        productSize.textContent = product.size;
-        productColor.textContent = product.color;
-        productPrice.textContent = product.price;
-        productStock.textContent = product.stock;
-        
-        // Update status with appropriate class
-        productStatus.textContent = 
-            product.status === 'in-stock' ? 'In Stock' : 
-            product.status === 'low' ? 'Low Stock' : 'Out of Stock';
-        
-        productStatus.className = `status status-${product.status}`;
-        
-        // Update product image
-        productImage.src = product.image;
-        productImage.style.display = 'block';
-        productPlaceholder.style.display = 'none';
-    } else {
-        // Product not found
-        productName.textContent = 'Product Not Found';
-        productBrand.textContent = '-';
-        productCategory.textContent = '-';
-        productSize.textContent = '-';
-        productColor.textContent = '-';
-        productPrice.textContent = '-';
-        productStock.textContent = '-';
-        productStatus.textContent = 'Unknown';
-        productStatus.className = 'status';
-        
-        // Hide product image
-        productImage.style.display = 'none';
-        productPlaceholder.style.display = 'block';
+    if (startScannerBtn) {
+        startScannerBtn.disabled = false;
+    }
+    if (stopScannerBtn) {
+        stopScannerBtn.disabled = true;
     }
 }
 
-// Manual barcode entry
 function manualEntry() {
     const code = prompt('Enter barcode manually:');
     if (code) {
-        processBarcode(code);
+        processBarcode(code.trim());
     }
 }
 
-// Event Listeners
-startScannerBtn.addEventListener('click', startScanner);
-stopScannerBtn.addEventListener('click', stopScanner);
-manualEntryBtn.addEventListener('click', manualEntry);
+async function loadInventory() {
+    try {
+        const products = await fetchJson(`${API_BASE}/products`);
+        inventory = products;
+        renderInventoryTable(products);
+    } catch (error) {
+        console.error('Unable to load inventory:', error);
+        renderInventoryTable([]);
+    }
+}
 
-// Initialize the page
-initializeInventoryTable();
+if (startScannerBtn) {
+    startScannerBtn.addEventListener('click', startScanner);
+}
 
-// Demo: Auto-scan a product after 2 seconds for demo purposes
-setTimeout(() => {
-    processBarcode('123456789012');
-}, 2000);
+if (stopScannerBtn) {
+    stopScannerBtn.addEventListener('click', stopScanner);
+}
+
+if (manualEntryBtn) {
+    manualEntryBtn.addEventListener('click', manualEntry);
+}
+
+loadInventory();
+resetProductDetails();
