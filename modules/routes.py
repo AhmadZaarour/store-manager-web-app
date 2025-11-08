@@ -48,8 +48,8 @@ def sale_to_dict(sale):
 
 # ---------- Homepage ----------
 @main.route('/')
-def index():
-    return send_from_directory(main.static_folder, 'index.html')
+def dashboard():
+    return send_from_directory(main.static_folder, 'dashboard.html')
 
 
 # ---------- Products ----------
